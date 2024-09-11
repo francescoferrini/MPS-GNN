@@ -12,7 +12,7 @@ To download the preprocessed data, please retrieve the files from [google drive]
 
 ## Run
 
-For running the code, chose the dataset inside the 
+For running the code, chose the dataset inside the file `run.sh` and then run
 
 ```sh
 bash run.sh
