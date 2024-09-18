@@ -11,13 +11,13 @@ else:
     device = torch.device("cpu")
     
 
-def get_optimizer(net, lr):#, wd):
+def get_optimizer(net, lr):
   return torch.optim.Adam(net.parameters(), lr=lr)#, weight_decay=wd)
 
 def get_cost_function(class_weights):
   return nn.NLLLoss(weight=class_weights)
 
-def test(net, data_test_val, cost_function, arg):#, device='cuda'):
+def test(net, data_test_val, cost_function, arg):
   net.eval() 
   with torch.no_grad():
     # Load data into GPU
@@ -30,14 +30,14 @@ def test(net, data_test_val, cost_function, arg):#, device='cuda'):
     # F1
     predicted = torch.argmax(outputs, 1)
     if arg == "test":  
-      f1 = f1_score(targets.cpu().numpy()[data_test_val.test_mask], predicted.detach().cpu().numpy()[data_test_val.test_mask], average = 'macro')
+      f1 = f1_score(targets.cpu().numpy()[data_test_val.test_mask], predicted.detach().cpu().numpy()[data_test_val.test_mask], average = 'micro')
       auc = roc_auc_score(targets.cpu().numpy()[data_test_val.test_mask], predicted.cpu().detach().numpy()[data_test_val.test_mask], average = "macro")
     else: 
-      f1 = f1_score(targets.cpu().numpy()[data_test_val.val_mask], predicted.detach().cpu().numpy()[data_test_val.val_mask], average = 'macro')
+      f1 = f1_score(targets.cpu().numpy()[data_test_val.val_mask], predicted.detach().cpu().numpy()[data_test_val.val_mask], average = 'micro')
       auc = roc_auc_score(targets.cpu().numpy()[data_test_val.val_mask], predicted.cpu().detach().numpy()[data_test_val.val_mask], average = "macro")
     return loss.item(), f1, auc
 
-def train(net, data_train, optim, cost_function): #, device='cuda')
+def train(net, data_train, optim, cost_function): 
   net.train() 
   # Load data into GPU
   targets = data_train.mpgnn_y.to(device)
@@ -51,17 +51,26 @@ def train(net, data_train, optim, cost_function): #, device='cuda')
   optim.zero_grad()
   # F1
   predicted = torch.argmax(outputs, 1)
-  f1 = f1_score(targets.cpu().numpy()[data_train.train_mask], predicted.detach().cpu().numpy()[data_train.train_mask], average = 'macro')
+  f1 = f1_score(targets.cpu().numpy()[data_train.train_mask], predicted.detach().cpu().numpy()[data_train.train_mask], average = 'micro')
   auc = roc_auc_score(targets.cpu().numpy()[data_train.train_mask], predicted.detach().cpu().numpy()[data_train.train_mask], average = "macro")
   return loss.item(), f1, auc
 
-def mpgnn(data_mpgnn, meta_path):
-  best_val, best_model = 0., None
+def mpgnn(data_mpgnn, meta_path, pre_trained_model, hidden_dim):
   input_dim = data_mpgnn.x.size(1)
-  hidden_dim = 16
-  
   output_dim = len(torch.unique(data_mpgnn.mpgnn_y))
-  learning_rate = 0.01
+  
+  if pre_trained_model:
+    model = MetaPathGNN(input_dim, hidden_dim, output_dim, meta_path)
+    model.load_state_dict(torch.load(pre_trained_model[0]))
+    model.to(device)
+    data_mpgnn.to(device)
+    class_weights=torch.tensor([1., torch.tensor(data_mpgnn.y.tolist().count(0.)/data_mpgnn.y.tolist().count(1.))/2]).to(device)
+    cost_function = get_cost_function(class_weights=class_weights)
+    test_loss, test_f1, test_auc = test(model, data_mpgnn, cost_function, arg="test")
+    return test_f1, test_auc
+    
+  best_val, best_model = 0., None
+  learning_rate = 0.001
   epochs = 1000
 
   model = MetaPathGNN(input_dim, hidden_dim, output_dim, meta_path)
@@ -88,4 +97,5 @@ def mpgnn(data_mpgnn, meta_path):
   
   #trainable_params = sum(p.numel() for p in best_model.parameters() if p.requires_grad)   
   test_loss, test_f1, test_auc = test(best_model, data_mpgnn, cost_function, arg="test")
+  #torch.save(best_model.state_dict(), "/mnt/cimec-storage6/users/antonio.longa/tmp/anto2/MPS-GNN/models/mondial.pth")
   return test_f1, test_auc

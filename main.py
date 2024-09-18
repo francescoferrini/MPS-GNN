@@ -155,101 +155,116 @@ def best_result(result, n):
             return min_tuple
         
 def main(args):  
+    if args.pre_trained == "True":
+        with open(args.folder+"/data/data_"+args.dataset+".pkl", "rb") as file:
+            data = pickle.load(file)
+        pre_trained_model = [args.folder + "/models/"+args.dataset+".pth"]
+        pre_trained_model.append(args.hidden_dim)
+        if args.dataset == 'eicu':
+            metapaths = [[111, 52], [112, 54]]
+        elif args.dataset == 'ergastf1':
+            metapaths = [[9, 0], [7, 1]]
+        elif args.dataset == 'mondial':            
+            metapaths = [[4, 14], [14, 2]]
+        
+        f1, test_auc = mpgnn(data, metapaths, pre_trained_model, args.hidden_dim)
+        print("f1: ", f1)
+    else:
+        pre_trained_model=[]
+        metapaths, finalmetapaths, final = [], [], []
+        K, L_MAX, iteration = 2, 4, 0
+        partial_results, res = {}, {}
+        
+        with open(args.folder+"/data/data_"+args.dataset+".pkl", "rb") as file:
+            data = pickle.load(file)
+        data_mpgnn = data.clone()
+        data = data_object(data) 
+        actual_relations = extract_relation_types(data.edge_index, data.edge_type, data.target_ids)
 
-    metapaths, finalmetapaths, final = [], [], []
-    K, L_MAX, iteration = 2, 4, 0
-    partial_results, res = {}, {}
-    
-    with open(args.folder+"data_"+args.dataset+".pkl", "rb") as file:
-        data = pickle.load(file)
-    data_mpgnn = data.clone()
-    data = data_object(data) 
-    actual_relations = extract_relation_types(data.edge_index, data.edge_type, data.target_ids)
+        result = []
+        for rel in actual_relations:
+            partial_result = score(rel, data, sampling_size=0.4)
+            result.append(partial_result)
 
-    result = []
-    for rel in actual_relations:
-        partial_result = score(rel, data, sampling_size=0.4)
-        result.append(partial_result)
+        tupla, tupla2 = best_result(result, n=K)
+        relat, theta, relat2, theta2 = tupla[0], tupla[2], tupla2[0], tupla2[2]
 
-    tupla, tupla2 = best_result(result, n=K)
-    relat, theta, relat2, theta2 = tupla[0], tupla[2], tupla2[0], tupla2[2]
+        metapaths.insert(0, [relat])
+        metapaths.insert(0, [relat2])
+        
+        finalmetapaths.insert(0, [relat])
+        finalmetapaths.insert(0, [relat2])
+        
+        test_f1, test_auc = mpgnn(data_mpgnn, [[relat]], pre_trained_model, args.hidden_dim)
 
-    metapaths.insert(0, [relat])
-    metapaths.insert(0, [relat2])
-    
-    finalmetapaths.insert(0, [relat])
-    finalmetapaths.insert(0, [relat2])
-    
-    test_f1, test_auc = mpgnn(data_mpgnn, [[relat]])
+        partial_results[str([relat])] = {}
+        partial_results[str([relat])]['relation'] = relat
+        partial_results[str([relat])]['meta'] = [relat]
+        partial_results[str([relat])]['theta'] = theta
+        partial_results[str([relat])]['f1'] = test_f1
+        partial_results[str([relat])]['data'] = data.clone()
+        
+        test_f1, test_auc = mpgnn(data_mpgnn, [[relat2]], pre_trained_model, args.hidden_dim)
 
-    partial_results[str([relat])] = {}
-    partial_results[str([relat])]['relation'] = relat
-    partial_results[str([relat])]['meta'] = [relat]
-    partial_results[str([relat])]['theta'] = theta
-    partial_results[str([relat])]['f1'] = test_f1
-    partial_results[str([relat])]['data'] = data.clone()
-    
-    test_f1, test_auc = mpgnn(data_mpgnn, [[relat2]])
+        partial_results[str([relat2])] = {}
+        partial_results[str([relat2])]['relation'] = relat2
+        partial_results[str([relat2])]['meta'] = [relat2]
+        partial_results[str([relat2])]['theta'] = theta2
+        partial_results[str([relat2])]['f1'] = test_f1
+        partial_results[str([relat2])]['data'] = data.clone()
+        
+        while(iteration < L_MAX):
+            tmp_metapaths = []
+            for i in range(0, len(metapaths)):
+                data, theta, relation = partial_results[str(metapaths[i])]['data'],  partial_results[str(metapaths[i])]['theta'], partial_results[str(metapaths[i])]['relation']
+                data_new = create_new_data(data, theta, relation)
+                if len(data_new.target_ids) > 0:
+                    actual_relations = extract_relation_types(data.edge_index, data.edge_type, data.target_ids)
+                    
+                    result = []
+                    for rel in actual_relations:
+                        partial_result = score(rel, data_new, sampling_size=0.4)
+                        result.append(partial_result)
+                    tupla = best_result(result, n=1)
+                    relat, theta = tupla[0], tupla[2]
+                    
+                    tmp_meta = partial_results[str(metapaths[i])]['meta']
+                    tmp_meta.insert(0, relat)
+                    
+                    tmp_metapaths.append(tmp_meta)
+                    finalmetapaths.append(tmp_meta)
+                    test_f1, test_auc = mpgnn(data_mpgnn, [tmp_meta], pre_trained_model, args.hidden_dim)
+        
+                    partial_results[str(tmp_meta)] = {}
+                    partial_results[str(tmp_meta)]['relation'] = relat
+                    partial_results[str(tmp_meta)]['meta'] = tmp_meta
+                    partial_results[str(tmp_meta)]['theta'] = theta
+                    partial_results[str(tmp_meta)]['f1'] = test_f1
+                    partial_results[str(tmp_meta)]['data'] = data_new.clone()
 
-    partial_results[str([relat2])] = {}
-    partial_results[str([relat2])]['relation'] = relat2
-    partial_results[str([relat2])]['meta'] = [relat2]
-    partial_results[str([relat2])]['theta'] = theta2
-    partial_results[str([relat2])]['f1'] = test_f1
-    partial_results[str([relat2])]['data'] = data.clone()
-    
-    while(iteration < L_MAX):
-        tmp_metapaths = []
-        for i in range(0, len(metapaths)):
-            data, theta, relation = partial_results[str(metapaths[i])]['data'],  partial_results[str(metapaths[i])]['theta'], partial_results[str(metapaths[i])]['relation']
-            data_new = create_new_data(data, theta, relation)
-            if len(data_new.target_ids) > 0:
-                actual_relations = extract_relation_types(data.edge_index, data.edge_type, data.target_ids)
-                
-                result = []
-                for rel in actual_relations:
-                    partial_result = score(rel, data_new, sampling_size=0.4)
-                    result.append(partial_result)
-                tupla = best_result(result, n=1)
-                relat, theta = tupla[0], tupla[2]
-                
-                tmp_meta = partial_results[str(metapaths[i])]['meta']
-                tmp_meta.insert(0, relat)
-                
-                tmp_metapaths.append(tmp_meta)
-                finalmetapaths.append(tmp_meta)
-                test_f1, test_auc = mpgnn(data_mpgnn, [tmp_meta])
-     
-                partial_results[str(tmp_meta)] = {}
-                partial_results[str(tmp_meta)]['relation'] = relat
-                partial_results[str(tmp_meta)]['meta'] = tmp_meta
-                partial_results[str(tmp_meta)]['theta'] = theta
-                partial_results[str(tmp_meta)]['f1'] = test_f1
-                partial_results[str(tmp_meta)]['data'] = data_new.clone()
+            metapaths=tmp_metapaths
+            iteration += 1
 
-        metapaths=tmp_metapaths
-        iteration += 1
-
-    for element in finalmetapaths:
-        if element not in final: final.append(element)
-    for element in final:
-        res[str(element)] = [partial_results[str(element)]['f1']]
-        # print(partial_results[str(element)]['meta'])
-        # print(partial_results[str(element)]['f1'])
-    
-    ordered_res = dict(sorted(res.items(), key=lambda item: item[1][0], reverse=True))
-    meta_1_1 = [ast.literal_eval(list(ordered_res.keys())[0]), ast.literal_eval(list(ordered_res.keys())[1])]
-    f_1_1, test_auc = mpgnn(data_mpgnn, meta_1_1)
-    
-    meta = [ast.literal_eval(list(ordered_res.keys())[0]), ordered_res[list(ordered_res.keys())[0]]]
-    
-    if f_1_1 > ordered_res[list(ordered_res.keys())[0]]:
-        meta_2_1 = [ast.literal_eval(list(ordered_res.keys())[0]), ast.literal_eval(list(ordered_res.keys())[1]), ast.literal_eval(list(ordered_res.keys())[2])]
-        f_2_1, test_auc = mpgnn(data_mpgnn, meta_2_1)
-        meta = [meta_1_1, f_1_1]
-        if f_2_1 > f_1_1:
-            meta = [meta_2_1, f_2_1]
-    print(meta)
+        for element in finalmetapaths:
+            if element not in final: final.append(element)
+        for element in final:
+            res[str(element)] = [partial_results[str(element)]['f1']]
+            # print(partial_results[str(element)]['meta'])
+            # print(partial_results[str(element)]['f1'])
+        
+        ordered_res = dict(sorted(res.items(), key=lambda item: item[1][0], reverse=True))
+        meta_1_1 = [ast.literal_eval(list(ordered_res.keys())[0]), ast.literal_eval(list(ordered_res.keys())[1])]
+        f_1_1, test_auc = mpgnn(data_mpgnn, meta_1_1, pre_trained_model, args.hidden_dim)
+        
+        meta = [ast.literal_eval(list(ordered_res.keys())[0]), ordered_res[list(ordered_res.keys())[0]]]
+        
+        if f_1_1 > ordered_res[list(ordered_res.keys())[0]]:
+            meta_2_1 = [ast.literal_eval(list(ordered_res.keys())[0]), ast.literal_eval(list(ordered_res.keys())[1]), ast.literal_eval(list(ordered_res.keys())[2])]
+            f_2_1, test_auc = mpgnn(data_mpgnn, meta_2_1, pre_trained_model, args.hidden_dim)
+            meta = [meta_1_1, f_1_1]
+            if f_2_1 > f_1_1:
+                meta = [meta_2_1, f_2_1]
+        print(meta)
  
         
     
@@ -261,6 +276,8 @@ if __name__ == '__main__':
             help="dataset")
     parser.add_argument("--folder", type=str, required=True,
             help="folder")
+    parser.add_argument("--pre_trained", type=str, required=True,
+            help="pre_trained model")
     args = parser.parse_args()
     #print(args, flush=True)
     main(args)

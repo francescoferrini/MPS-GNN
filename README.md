@@ -20,4 +20,5 @@ bash run.sh
 where in the file you can specify:
 - **dataset**
 - **hidden_dim:** hidden embedding dimension for the model
+- **pre_trained:** = True if you want to try the pre_trained models
 
