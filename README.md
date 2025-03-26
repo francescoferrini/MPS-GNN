@@ -24,7 +24,7 @@ where in the file you can specify:
 
 ## 📖 Cite
 
-```sh
+```
 @article{
 ferrini2025a,
 title={A Self-Explainable Heterogeneous {GNN} for Relational Deep Learning},
