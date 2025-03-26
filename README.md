@@ -22,3 +22,18 @@ where in the file you can specify:
 - **hidden_dim:** hidden embedding dimension for the model
 - **pre_trained:** = True if you want to try the pre_trained models
 
+## 📖 Cite
+
+```sh
+@article{
+ferrini2025a,
+title={A Self-Explainable Heterogeneous {GNN} for Relational Deep Learning},
+author={Francesco Ferrini and Antonio Longa and Andrea Passerini and Manfred Jaeger},
+journal={Transactions on Machine Learning Research},
+issn={2835-8856},
+year={2025},
+url={https://openreview.net/forum?id=8Q4qxe9a9Z},
+note={}
+}
+```
+
