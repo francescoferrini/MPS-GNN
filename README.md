@@ -1,6 +1,8 @@
 # MPS-GNN
 
-Code for the model Meta-path Statistics Graph Neural Network
+Official code for the TMLR 2025 paper ["A Self-Explainable Heterogeneous GNN for Relational Deep
+Learning"](https://openreview.net/pdf?id=8Q4qxe9a9Z)
+
 # Databases
 
 For this project 3 relational databases have been employed:
